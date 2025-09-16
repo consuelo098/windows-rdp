@@ -1,11 +1,10 @@
-name: ZeroTier-RDP
+name: RDP with ZeroTier
 
-on: [push, workflow_dispatch]
+on: [workflow_dispatch]
 
 jobs:
   build:
     runs-on: windows-2022
-
     steps:
     - name: Install ZeroTier
       run: |
@@ -13,21 +12,19 @@ jobs:
         Start-Process msiexec.exe -ArgumentList '/i ZeroTierOne.msi /quiet /norestart' -Wait
 
     - name: Join ZeroTier Network
-      run: |
-        Start-Process "C:\Program Files (x86)\ZeroTier\One\zerotier-one_x64.exe" -ArgumentList "join $Env:ZT_NET_ID"
       env:
         ZT_NET_ID: ${{ secrets.ZT_NET_ID }}
+      run: Start-Process "C:\Program Files\ZeroTier\One\zerotier-one_x64.exe" -ArgumentList "join $Env:ZT_NET_ID" -Wait
 
     - name: Enable RDP + Set Password
       run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\' -Name "fDenyTSConnections" -Value 0
+        net user runneradmin MyPassword123!
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        net user runneradmin MyPassword123
 
     - name: Show ZeroTier IP
-      run: |
-        echo "ZeroTier IP Address:"
-        ipconfig | findstr "10." || ipconfig | findstr "172." || ipconfig | findstr "192."
+      run: ipconfig
 
     - name: Keep Alive
-      run: while ($true) { Start-Sleep -Seconds 300 }
+      run: |
+        while ($true) { Start-Sleep -Seconds 300 }
