@@ -10,11 +10,14 @@ jobs:
       run: |
         Invoke-WebRequest https://download.zerotier.com/dist/ZeroTierOne.msi -OutFile ZeroTierOne.msi
         Start-Process msiexec.exe -ArgumentList '/i ZeroTierOne.msi /quiet /norestart' -Wait
+        Start-Sleep -Seconds 20
 
     - name: Join ZeroTier Network
       env:
         ZT_NET_ID: ${{ secrets.ZT_NET_ID }}
-      run: Start-Process "C:\Program Files\ZeroTier\One\zerotier-one_x64.exe" -ArgumentList "join $Env:ZT_NET_ID" -Wait
+      run: |
+        cd "C:\Program Files\ZeroTier\One"
+        .\zerotier-cli.bat join $Env:ZT_NET_ID
 
     - name: Enable RDP + Set Password
       run: |
