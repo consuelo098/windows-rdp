@@ -1,4 +1,4 @@
-name: RDP with ZeroTier
+name: RDP with ZeroTier (Test Mode)
 
 on: [workflow_dispatch]
 
@@ -12,12 +12,34 @@ jobs:
         Start-Process msiexec.exe -ArgumentList '/i ZeroTierOne.msi /quiet /norestart' -Wait
         Start-Sleep -Seconds 20
 
-    - name: Join ZeroTier Network
+    - name: Debug - Search ZeroTier files
+      run: |
+        Write-Host "🔍 Searching for ZeroTier installation..."
+        Get-ChildItem "C:\" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "zerotier*" } | Select-Object FullName
+
+    - name: Try Join ZeroTier Network
       env:
         ZT_NET_ID: ${{ secrets.ZT_NET_ID }}
       run: |
-        cd "C:\Program Files\ZeroTier\One"
-        .\zerotier-cli.bat join $Env:ZT_NET_ID
+        $paths = @(
+          "C:\ProgramData\ZeroTier\One\zerotier-cli.bat",
+          "C:\Program Files (x86)\ZeroTier\One\zerotier-cli.bat",
+          "C:\Program Files\ZeroTier\One\zerotier-cli.bat"
+        )
+
+        $found = $false
+        foreach ($p in $paths) {
+          if (Test-Path $p) {
+            Write-Host "✅ Found CLI at $p"
+            & $p join $Env:ZT_NET_ID
+            $found = $true
+            break
+          }
+        }
+
+        if (-not $found) {
+          Write-Error "❌ ZeroTier CLI not found in common paths. Check debug step above."
+        }
 
     - name: Enable RDP + Set Password
       run: |
