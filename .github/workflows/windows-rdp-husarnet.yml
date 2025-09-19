@@ -22,11 +22,19 @@ jobs:
     timeout-minutes: 370
     steps:
 
-      - name: Connect to Husarnet VPN
-        uses: husarnet/husarnet-action@v5
-        with:
-          join-code: ${{ secrets.HUSARNET_JOINCODE }}
-          hostname: github-actions-rdp
+      # Official Husarnet install for Windows
+      - name: Install Husarnet for Windows
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://install.husarnet.com/windows/husarnet-latest-win64.exe" -OutFile "$env:TEMP\husarnet-installer.exe"
+          Start-Process -FilePath "$env:TEMP\husarnet-installer.exe" -ArgumentList "/S" -Wait
+
+      - name: Connect to Husarnet with Join Code
+        shell: pwsh
+        run: |
+          $env:Path += ";C:\Program Files\Husarnet"
+          & 'C:\Program Files\Husarnet\husarnet.exe' join "${{ secrets.HUSARNET_JOINCODE }}" github-actions-rdp
+          & 'C:\Program Files\Husarnet\husarnet.exe' status
 
       - name: Create RDP User and Enable RDP
         shell: pwsh
