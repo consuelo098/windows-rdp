@@ -26,8 +26,10 @@ jobs:
       - name: Install Husarnet for Windows
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://install.husarnet.com/windows/husarnet-latest-win64.exe" -OutFile "$env:TEMP\husarnet-installer.exe"
-          Start-Process -FilePath "$env:TEMP\husarnet-installer.exe" -ArgumentList "/S" -Wait
+          $url = "https://install.husarnet.com/windows/husarnet-latest-win64.exe"
+          $dst = "$env:TEMP\husarnet-latest-win64.exe"
+          Invoke-WebRequest -Uri $url -OutFile $dst -UseBasicParsing
+          Start-Process -FilePath $dst -ArgumentList "/S" -Wait
 
       - name: Connect to Husarnet with Join Code
         shell: pwsh
