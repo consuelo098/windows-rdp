@@ -1,4 +1,4 @@
-name: Windows RDP via Husarnet
+name: Linux RDP via Husarnet
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       rdp_user:
         description: "RDP Username"
         required: false
-        default: "HNUser"
+        default: "hnuser"
       rdp_pass:
         description: "RDP Password"
         required: false
-        default: "HNPass123"
+        default: "HusarnetPass123"
       runtime_minutes:
         description: "RDP Alive Minutes (max 355)"
         required: false
@@ -18,78 +18,41 @@ on:
 
 jobs:
   rdp:
-    runs-on: windows-2022
+    runs-on: ubuntu-latest
     timeout-minutes: 370
     steps:
-
-      # Official Husarnet install for Windows
-      - name: Install Husarnet for Windows
-        shell: pwsh
+      - name: Update and install essentials
         run: |
-          $url = "https://install.husarnet.com/windows/husarnet-latest-win64.exe"
-          $dst = "$env:TEMP\husarnet-latest-win64.exe"
-          Invoke-WebRequest -Uri $url -OutFile $dst -UseBasicParsing
-          Start-Process -FilePath $dst -ArgumentList "/S" -Wait
+          sudo apt-get update
+          sudo apt-get install -y xrdp xfce4 xfce4-goodies
+          sudo apt-get install -y wget curl git htop neofetch
+          sudo adduser --disabled-password --gecos "" ${{ github.event.inputs.rdp_user }}
+          echo "${{ github.event.inputs.rdp_user }}:${{ github.event.inputs.rdp_pass }}" | sudo chpasswd
 
-      - name: Connect to Husarnet with Join Code
-        shell: pwsh
+      - name: Install Husarnet
         run: |
-          $env:Path += ";C:\Program Files\Husarnet"
-          & 'C:\Program Files\Husarnet\husarnet.exe' join "${{ secrets.HUSARNET_JOINCODE }}" github-actions-rdp
-          & 'C:\Program Files\Husarnet\husarnet.exe' status
+          curl -s https://install.husarnet.com/install.sh | sudo bash
 
-      - name: Create RDP User and Enable RDP
-        shell: pwsh
+      - name: Connect to Husarnet
         run: |
-          $u = "${{ github.event.inputs.rdp_user }}"
-          $p = "${{ github.event.inputs.rdp_pass }}"
-          $sec = ConvertTo-SecureString $p -AsPlainText -Force
-          if (-not (Get-LocalUser -Name $u -ErrorAction SilentlyContinue)) {
-            New-LocalUser -Name $u -Password $sec -AccountNeverExpires
-            Add-LocalGroupMember -Group Administrators -Member $u
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
-          } else {
-            Set-LocalUser -Name $u -Password $sec -AccountNeverExpires
-          }
-          Enable-LocalUser -Name $u
-          Set-ItemProperty "HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server" -Name fDenyTSConnections -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop" | Out-Null
+          sudo husarnet join "${{ secrets.HUSARNET_JOINCODE }}" linux-gha-rdp
+          sudo husarnet status
 
-      - name: Enable Windows Audio Service
-        shell: pwsh
+      - name: Configure xRDP for new user
         run: |
-          Set-Service -Name "Audiosrv" -StartupType Automatic
-          Start-Service -Name "Audiosrv"
+          echo "startxfce4" | sudo tee /home/${{ github.event.inputs.rdp_user }}/.xsession
+          sudo chown ${{ github.event.inputs.rdp_user }}:${{ github.event.inputs.rdp_user }} /home/${{ github.event.inputs.rdp_user }}/.xsession
+          sudo adduser ${{ github.event.inputs.rdp_user }} ssl-cert
+          sudo systemctl restart xrdp
 
-      - name: Downloading & Installing Essentials
-        shell: cmd
+      - name: Display Husarnet IPv6 address
         run: |
-          curl -s -L -o C:\Users\Public\Desktop\Telegram.exe https://telegram.org/dl/desktop/win64
-          curl -s -L -o C:\Users\Public\Desktop\Winrar.exe https://www.rarlab.com/rar/winrar-x64-621.exe
-          powershell -Command "Invoke-WebRequest 'https://install.speedtest.net/app/windows/latest/speedtestbyookla_x64.msi' -OutFile 'C:\Users\Public\Desktop\speedtestbyookla_x64.msi'"
-          powershell -Command "Invoke-WebRequest 'https://mirror2.internetdownloadmanager.com/idman642build43.exe' -OutFile 'C:\Users\Public\Desktop\idman642build43.exe'"
-          msiexec.exe /i C:\Users\Public\Desktop\speedtestbyookla_x64.msi /quiet /norestart
-          C:\Users\Public\Desktop\Winrar.exe /S
-          del C:\Users\Public\Desktop\Winrar.exe
-          del C:\Users\Public\Desktop\speedtestbyookla_x64.msi
-          del /f "C:\Users\Public\Desktop\Epic Games Launcher.lnk"
-          del /f "C:\Users\Public\Desktop\Unity Hub.lnk"
+          sudo husarnet status
 
-      - name: Show Husarnet Address
-        shell: pwsh
+      - name: Keep RDP session alive
         run: |
-          $hosts = "$env:USERPROFILE\\.husarnet\\hosts.dat"
-          if (Test-Path $hosts) { Get-Content $hosts } else { Write-Host "Husarnet hosts file not found." }
-
-      - name: Keep RDP Session Alive
-        shell: pwsh
-        run: |
-          $runtime = [int]"${{ github.event.inputs.runtime_minutes }}"
-          if ($runtime -gt 355) { $runtime = 355 }
-          $end = (Get-Date).AddMinutes($runtime)
-          while ((Get-Date) -lt $end) {
-            $left = [math]::Ceiling(($end - (Get-Date)).TotalMinutes)
-            Write-Host "RDP alive... ($left min left)"
-            Start-Sleep -Seconds 60
-          }
-          
+          export END=$((SECONDS + ${{ github.event.inputs.runtime_minutes }} * 60))
+          while [ $SECONDS -lt $END ]; do
+            echo "RDP alive for $(( (${END} - $SECONDS) / 60 )) min left..."
+            sleep 60
+          done
